@@ -1,0 +1,10 @@
+
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+src/log/
+
+# dotenv environment variables file
+.env
