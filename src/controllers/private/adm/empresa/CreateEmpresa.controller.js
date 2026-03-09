@@ -1,34 +1,34 @@
 const { executeQueryWithSession } = require('../../../../config/database');
-const path          = require('path');
-const fs            = require('fs');
+const path = require('path');
+const fs = require('fs');
 const { log_error } = require('../../../../log/logger')
 
 const moveLogoToFinal = (tempPath, cod_empresa) => {
   const ext = path.extname(tempPath);
   const empresaDir = path.join(process.cwd(), 'src', 'filestore', 'empresas', String(cod_empresa));
-  
+
   if (!fs.existsSync(empresaDir)) {
     fs.mkdirSync(empresaDir, { recursive: true });
   }
-  
+
   const finalPath = path.join(empresaDir, `${cod_empresa}${ext}`);
-  
+
   if (fs.existsSync(finalPath)) {
     fs.unlinkSync(finalPath);
   }
-  
+
   fs.renameSync(tempPath, finalPath);
-  
+
   return `/empresas/${cod_empresa}/${cod_empresa}${ext}`;
 };
 
 exports.main = async (req, res) => {
   let tempFilePath = null;
-  
+
   try {
     const user = req.user;
     const empresaData = req.body;
-    
+
     if (req.file) {
       tempFilePath = req.file.path;
     }
@@ -38,8 +38,8 @@ exports.main = async (req, res) => {
       user,
       'SELECT COALESCE(MAX(cod_empresa), 0) + 1 as next_code FROM empresas',
       []
-    );    
-    
+    );
+
     const next_cod = maxResult.data[0].next_code;
 
     // INSERT empresa sin logo primero
@@ -52,8 +52,9 @@ exports.main = async (req, res) => {
                             , nro_telef
                             , tip_empresa
                             , modalidad
-                            , limit_venc
                             , estado
+                            , es_proveedor
+                            , limite_credito
                             , fecha_alta
                             ) 
                               VALUES 
@@ -67,34 +68,36 @@ exports.main = async (req, res) => {
                             , $7
                             , $8
                             , $9 
-                            , $10 
-                            , now() ) RETURNING cod_empresa`;    
+                            , $10
+                            , $11
+                            , now() ) RETURNING cod_empresa`;
     const params = [
       next_cod
-    , empresaData.nombre
-    , empresaData.ruc
-    , empresaData.direccion
-    , empresaData.correo
-    , empresaData.nro_telef
-    , empresaData.tip_empresa
-    , empresaData.modalidad
-    , empresaData.limite_venc || 0
-    , empresaData.estado      || 'A'
+      , empresaData.nombre
+      , empresaData.ruc
+      , empresaData.direccion
+      , empresaData.correo
+      , empresaData.nro_telef
+      , empresaData.tip_empresa
+      , empresaData.modalidad
+      , empresaData.estado || 'A'
+      , empresaData.es_proveedor === true || empresaData.es_proveedor === 'S' ? 'S' : 'N'
+      , empresaData.limite_credito || 0
     ];
-    
+
     const result = await executeQueryWithSession(user, query, params);
-    
+
     if (!result.success || !result.data[0]) {
       throw new Error('Error al crear empresa');
     }
-    
+
     const cod_empresa = result.data[0].cod_empresa;
-    
+
     // Si hay logo, moverlo y actualizar BD
     if (tempFilePath) {
       const logo_url = moveLogoToFinal(tempFilePath, cod_empresa);
       tempFilePath = null;
-      
+
       await executeQueryWithSession(
         user,
         'UPDATE empresas SET logo_url = $1 WHERE cod_empresa = $2',
@@ -103,9 +106,9 @@ exports.main = async (req, res) => {
     }
 
     return res.status(200).json({
-      success : true,
-      mensaje : 'Empresa creada exitosamente',
-      data    : { cod_empresa }
+      success: true,
+      mensaje: 'Empresa creada exitosamente',
+      data: { cod_empresa }
     });
 
   } catch (error) {

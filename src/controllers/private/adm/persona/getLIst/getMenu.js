@@ -13,6 +13,21 @@ exports.main = async (req, res) => {
       });
     }
 
+    // 1. Obtener si la empresa es proveedora
+    const empresaQuery = `SELECT es_proveedor FROM empresas WHERE cod_empresa = $1`;
+    const empresaResult = await executeQueryWithSession(user, empresaQuery, [user.cod_empresa]);
+
+    let es_proveedor = 'N';
+    if (empresaResult.success && empresaResult.data.length > 0) {
+      es_proveedor = empresaResult.data[0].es_proveedor;
+    }
+
+    // 2. Filtro para ocultar el menú 13 a las empresas que NO son proveedoras
+    let filterProveedor = '';
+    if (es_proveedor !== 'S') {
+      filterProveedor = `AND m.cod_menu != 13`;
+    }
+
     // Query recursiva para obtener menús del rol desde roles_menus
     const query = `
       WITH RECURSIVE menu_hierarchy AS (
@@ -30,6 +45,7 @@ exports.main = async (req, res) => {
           AND m.estado    = 'A' 
           AND rm.estado   = 'A'
           AND m.cod_menu_padre IS NULL
+          ${filterProveedor}
         
         UNION ALL
         
@@ -47,6 +63,7 @@ exports.main = async (req, res) => {
         WHERE m.estado    = 'A'
           AND rm.cod_role = $1
           AND rm.estado   = 'A'
+          ${filterProveedor}
       )
       SELECT DISTINCT * 
         FROM menu_hierarchy

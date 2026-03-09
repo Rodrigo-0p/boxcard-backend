@@ -1,37 +1,37 @@
 const { executeQueryWithSession } = require('../../../../config/database');
 const path = require('path');
-const fs   = require('fs');
-const jwt  = require('jsonwebtoken');
+const fs = require('fs');
+const jwt = require('jsonwebtoken');
 const { log_error } = require('../../../../log/logger');
-require('dotenv').config({path: path.join(__dirname,'..','..','..', '..', '.env'), quiet: true});
+require('dotenv').config({ path: path.join(__dirname, '..', '..', '..', '..', '.env'), quiet: true });
 
 
 const moveLogoToFinal = (tempPath, cod_empresa) => {
-  const ext        = path.extname(tempPath);
+  const ext = path.extname(tempPath);
   const empresaDir = path.join(process.cwd(), 'src', 'filestore', 'empresas', String(cod_empresa));
-  
+
   if (!fs.existsSync(empresaDir)) {
     fs.mkdirSync(empresaDir, { recursive: true });
   }
-  
+
   const finalPath = path.join(empresaDir, `${cod_empresa}${ext}`);
-  
+
   if (fs.existsSync(finalPath)) {
     fs.unlinkSync(finalPath);
   }
-  
+
   fs.renameSync(tempPath, finalPath);
-  
+
   return `/empresas/${cod_empresa}/${cod_empresa}${ext}`;
 };
 
 exports.main = async (req, res) => {
   let tempFilePath = null;
-  
+
   try {
     const user = req.user;
     const { cod_empresa, ...empresaData } = req.body;
-    
+
     if (!cod_empresa) {
       return res.status(400).json({
         success: false,
@@ -61,26 +61,28 @@ exports.main = async (req, res) => {
       , nro_telef   = $5
       , tip_empresa = $6
       , modalidad   = $7
-      , limit_venc  = $8
-      , estado      = $9
+      , estado      = $8
+      , es_proveedor = $9
+      , limite_credito = $10
       , fecha_mod   = NOW()
-        ${logo_url ? ', logo_url = $11' : ''}
-      WHERE cod_empresa = $10
+        ${logo_url ? ', logo_url = $12' : ''}
+      WHERE cod_empresa = $11
     `;
 
     const params = [
       empresaData.nombre
-    , empresaData.ruc
-    , empresaData.direccion
-    , empresaData.correo
-    , empresaData.nro_telef
-    , empresaData.tip_empresa
-    , empresaData.modalidad
-    , empresaData.limite_venc || 0
-    , empresaData.estado      || 'A'
-    , cod_empresa
+      , empresaData.ruc
+      , empresaData.direccion
+      , empresaData.correo
+      , empresaData.nro_telef
+      , empresaData.tip_empresa
+      , empresaData.modalidad
+      , empresaData.estado || 'A'
+      , empresaData.es_proveedor === true || empresaData.es_proveedor === 'S' ? 'S' : 'N'
+      , empresaData.limite_credito || 0
+      , cod_empresa
     ];
-    
+
     if (logo_url) params.push(logo_url);
 
     const result = await executeQueryWithSession(user, query, params);
@@ -98,18 +100,18 @@ exports.main = async (req, res) => {
       delete tokenPayload.password;
 
       let bandnewToken = false;
-      if(tokenPayload.empresas.length > 1){
+      if (tokenPayload.empresas.length > 1) {
         bandnewToken = true;
-        if(parseInt(user.cod_empresa) === parseInt(cod_empresa)) tokenPayload.logo_url = logo_url;
-        tokenPayload.empresas.map((items)=>{
-          if(items.cod_empresa === parseInt(cod_empresa)) items.logo_url = logo_url;
-        })  
-      }else if(parseInt(user.cod_empresa) === parseInt(cod_empresa)){
+        if (parseInt(user.cod_empresa) === parseInt(cod_empresa)) tokenPayload.logo_url = logo_url;
+        tokenPayload.empresas.map((items) => {
+          if (items.cod_empresa === parseInt(cod_empresa)) items.logo_url = logo_url;
+        })
+      } else if (parseInt(user.cod_empresa) === parseInt(cod_empresa)) {
         bandnewToken = true;
         tokenPayload.logo_url = logo_url;
       }
 
-      if(bandnewToken){
+      if (bandnewToken) {
         newToken = jwt.sign(
           tokenPayload,
           process.env.JWT_SECRET,
@@ -121,7 +123,7 @@ exports.main = async (req, res) => {
       success: true,
       mensaje: 'Empresa actualizada exitosamente',
       data: { cod_empresa },
-      token: newToken 
+      token: newToken
     });
 
   } catch (error) {

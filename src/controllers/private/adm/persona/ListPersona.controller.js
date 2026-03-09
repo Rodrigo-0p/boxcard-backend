@@ -4,7 +4,7 @@ const main = async (req, res) => {
   try {
     const user = req.user;
     const { cod_empresa } = user;
-    
+
     const query = `
       SELECT 
         p.cod_persona,
@@ -18,6 +18,7 @@ const main = async (req, res) => {
         p.nro_documento,
         p.nro_telef,
         p.correo,
+        p.password_temporal as es_password_temporal,
         CASE 
           WHEN p.usuario_pg IS NOT NULL THEN
             (SELECT r.rolname
@@ -34,9 +35,9 @@ const main = async (req, res) => {
       WHERE p.cod_empresa = $1
       ORDER BY p.descripcion ASC
     `;
-    
+
     const result = await executeQueryWithSession(user, query, [cod_empresa]);
-    
+
     if (!result.success) {
       return res.status(500).json({
         success: false,
@@ -44,7 +45,7 @@ const main = async (req, res) => {
         data: []
       });
     }
-    
+
     return res.status(200).json({
       success: true,
       data: result.data

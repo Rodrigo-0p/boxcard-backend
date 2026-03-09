@@ -4,7 +4,7 @@ require('dotenv').config();
 
 exports.main = async (req, res) => {
   try {
-    const user      = req.user;
+    const user = req.user;
     const adminUser = user;
     const { cod_persona, ...personaData } = req.body;
 
@@ -18,7 +18,7 @@ exports.main = async (req, res) => {
                             FROM personas 
                            WHERE cod_persona = $1`;
     const currentResult = await executeQueryWithSession(user, currentQuery, [cod_persona]);
-    
+
     if (!currentResult.success || currentResult.data.length === 0) {
       return res.status(404).json({ success: false, message: 'Persona no encontrada' });
     }
@@ -28,7 +28,7 @@ exports.main = async (req, res) => {
 
     // CASO 1: NO tenía usuario y ahora se está agregando uno
     if (!usuario_pg_actual && personaData.usuario_pg) {
-      
+
       if (!personaData.password) {
         return res.status(400).json({ success: false, message: 'Contraseña es requerida para crear el usuario' });
       }
@@ -40,14 +40,14 @@ exports.main = async (req, res) => {
                                  FROM pg_user 
                                 WHERE usename = $1`;
       const userExists = await executeAdminQuery(adminUser, userExistsQuery, [personaData.usuario_pg]);
-      
+
       if (userExists.data && userExists.data.length > 0) {
         return res.status(400).json({ success: false, message: `El usuario '${personaData.usuario_pg}' ya existe en el sistema` });
       }
 
       try {
         await executeAdminQuery(adminUser, `CREATE USER ${personaData.usuario_pg} WITH PASSWORD '${personaData.password}'`, []);
-        
+
         if (personaData.rol_principal) {
           await executeAdminQuery(adminUser, `GRANT ${personaData.rol_principal} TO ${personaData.usuario_pg}`, []);
         }
@@ -70,13 +70,15 @@ exports.main = async (req, res) => {
                           , cod_empresa   = $5
                           , estado        = $6
                           , usuario_pg    = $7
+                          , password_temporal = $8
                           , fecha_mod     = NOW()
-        WHERE cod_persona = $8
+        WHERE cod_persona = $9
       `;
-      
+
       const params = [
         personaData.descripcion, personaData.nro_documento, personaData.nro_telef, personaData.correo,
-        personaData.cod_empresa, personaData.estado || 'A', personaData.usuario_pg, cod_persona
+        personaData.cod_empresa, personaData.estado || 'A', personaData.usuario_pg,
+        personaData.es_password_temporal === 'S' ? 'S' : 'N', cod_persona
       ];
 
       const result = await executeQueryWithSession(user, updateQuery, params);
@@ -93,19 +95,28 @@ exports.main = async (req, res) => {
       // GUARDAR MENÚS - CASO 1
       await guardarMenus(user, personaData.cod_empresa, personaData.usuario_pg, personaData, null, null);
 
-    } 
+    }
     // CASO 2: YA tenía usuario
     else {
-      const updateQuery = `
+      let updateQuery = `
         UPDATE personas SET descripcion = $1, nro_documento = $2, nro_telef = $3, correo = $4,
                             cod_empresa = $5, estado = $6, fecha_mod = NOW()
-        WHERE cod_persona = $7
       `;
 
       const params = [
         personaData.descripcion, personaData.nro_documento, personaData.nro_telef,
-        personaData.correo, personaData.cod_empresa, personaData.estado || 'A', cod_persona
+        personaData.correo, personaData.cod_empresa, personaData.estado || 'A'
       ];
+
+      let paramCount = 7;
+      if (personaData.password && personaData.password.trim() !== '') {
+        updateQuery += `, password_temporal = $${paramCount}`;
+        params.push(personaData.es_password_temporal === 'S' ? 'S' : 'N');
+        paramCount++;
+      }
+
+      updateQuery += ` WHERE cod_persona = $${paramCount}`;
+      params.push(cod_persona);
 
       const result = await executeQueryWithSession(user, updateQuery, params);
 
@@ -186,18 +197,18 @@ exports.main = async (req, res) => {
 
 // FUNCIÓN AUXILIAR - Con cod_empresa y detección de cambio de rol
 async function guardarMenus(user, cod_empresa, cod_usuario, personaData, rol_principal_anterior, cod_empresa_anterior) {
-  
+
   // DETECTAR CAMBIO DE EMPRESA → Eliminar TODOS los menús de la empresa anterior
   if (cod_empresa_anterior && cod_empresa !== cod_empresa_anterior) {
-    await executeQueryWithSession(user, 
+    await executeQueryWithSession(user,
       'DELETE FROM roles_menu_espec WHERE usuario_pg = $1 AND cod_empresa = $2',
       [cod_usuario, cod_empresa_anterior]
     );
   }
-  
+
   // DETECTAR CAMBIO DE ROL PRINCIPAL → Eliminar menús del rol anterior
   if (personaData.rol_principal && rol_principal_anterior && personaData.rol_principal !== rol_principal_anterior) {
-    await executeQueryWithSession(user, 
+    await executeQueryWithSession(user,
       'DELETE FROM roles_menu_espec WHERE cod_empresa = $1 AND usuario_pg = $2 AND cod_role = $3',
       [cod_empresa, cod_usuario, rol_principal_anterior]
     );
@@ -210,7 +221,7 @@ async function guardarMenus(user, cod_empresa, cod_usuario, personaData, rol_pri
     `;
     const menusDelRol = await executeQueryWithSession(user, menusDelRolQuery, [personaData.rol_principal]);
     const menusSeleccionados = (personaData.menus_por_rol && personaData.menus_por_rol[personaData.rol_principal]) || [];
-    
+
     const upsertMenuQuery = `
       INSERT INTO roles_menu_espec (cod_empresa, usuario_pg, cod_role, cod_menu, estado, fecha_alta)
       VALUES ($1, $2, $3, $4, $5, NOW())
@@ -222,9 +233,9 @@ async function guardarMenus(user, cod_empresa, cod_usuario, personaData, rol_pri
       const estadoMenu = menusSeleccionados.includes(menuRow.cod_menu) ? 'A' : 'I';
       await executeQueryWithSession(user, upsertMenuQuery, [
         cod_empresa,                // ← cod_empresa
-        cod_usuario, 
-        personaData.rol_principal, 
-        menuRow.cod_menu, 
+        cod_usuario,
+        personaData.rol_principal,
+        menuRow.cod_menu,
         estadoMenu
       ]);
     }
@@ -238,16 +249,16 @@ async function guardarMenus(user, cod_empresa, cod_usuario, personaData, rol_pri
       WHERE cod_empresa = $1 AND usuario_pg = $2 AND cod_role != $3
     `;
     const currentRolesResult = await executeQueryWithSession(user, currentRolesQuery, [
-      cod_empresa, 
-      cod_usuario, 
+      cod_empresa,
+      cod_usuario,
       personaData.rol_principal || 'none'
     ]);
     const currentRoles = currentRolesResult.data.map(r => r.cod_role);
-    
+
     // Eliminar roles que ya no están en la lista
     for (const rol of currentRoles) {
       if (!personaData.roles_adicionales.includes(rol)) {
-        await executeQueryWithSession(user, 
+        await executeQueryWithSession(user,
           'DELETE FROM roles_menu_espec WHERE cod_empresa = $1 AND usuario_pg = $2 AND cod_role = $3',
           [cod_empresa, cod_usuario, rol]
         );
@@ -261,7 +272,7 @@ async function guardarMenus(user, cod_empresa, cod_usuario, personaData, rol_pri
       `;
       const menusDelRol = await executeQueryWithSession(user, menusDelRolQuery, [rol]);
       const menusSeleccionados = (personaData.menus_por_rol && personaData.menus_por_rol[rol]) || [];
-      
+
       const upsertMenuQuery = `
         INSERT INTO roles_menu_espec (cod_empresa, usuario_pg, cod_role, cod_menu, estado, fecha_alta)
         VALUES ($1, $2, $3, $4, $5, NOW())
@@ -273,9 +284,9 @@ async function guardarMenus(user, cod_empresa, cod_usuario, personaData, rol_pri
         const estadoMenu = menusSeleccionados.includes(menuRow.cod_menu) ? 'A' : 'I';
         await executeQueryWithSession(user, upsertMenuQuery, [
           cod_empresa,    // ← cod_empresa
-          cod_usuario, 
-          rol, 
-          menuRow.cod_menu, 
+          cod_usuario,
+          rol,
+          menuRow.cod_menu,
           estadoMenu
         ]);
       }

@@ -3,29 +3,10 @@ const { executeQueryWithSession } = require('../../../../config/database');
 const main = async (req, res) => {
   try {
     const user = req.user;
-    const { cod_persona , role } = user;
+    const { cod_persona, role } = user;
     let query, params;
 
-     if (role === 'rol_super_adm') {
-        query = `
-           SELECT e.cod_empresa
-                , e.nombre
-                , e.ruc
-                , e.direccion
-                , e.correo
-                , e.nro_telef
-                , e.tip_empresa
-                , e.modalidad
-                , e.estado
-                , e.fecha_alta
-                , e.fecha_mod
-                , e.logo_url
-                , e.limit_venc
-             FROM empresas e
-            ORDER BY nombre ASC
-        `;
-         params = [];
-     }else{
+    if (role === 'rol_super_adm') {
       query = `
            SELECT e.cod_empresa
                 , e.nombre
@@ -39,7 +20,28 @@ const main = async (req, res) => {
                 , e.fecha_alta
                 , e.fecha_mod
                 , e.logo_url
-                , e.limit_venc
+                , e.es_proveedor
+                , e.limite_credito
+             FROM empresas e
+            ORDER BY nombre ASC
+        `;
+      params = [];
+    } else {
+      query = `
+           SELECT e.cod_empresa
+                , e.nombre
+                , e.ruc
+                , e.direccion
+                , e.correo
+                , e.nro_telef
+                , e.tip_empresa
+                , e.modalidad
+                , e.estado
+                , e.fecha_alta
+                , e.fecha_mod
+                , e.logo_url
+                , e.es_proveedor
+                , e.limite_credito
             FROM empresas e
             INNER JOIN personas p ON e.cod_empresa = p.cod_empresa
             WHERE p.cod_persona = $1
@@ -47,9 +49,9 @@ const main = async (req, res) => {
               AND p.estado = 'A'
             ORDER BY e.nombre ASC
         `;
-        params = [cod_persona];
-     }
-     
+      params = [cod_persona];
+    }
+
     const result = await executeQueryWithSession(user, query, params);
 
     if (!result.success) {
