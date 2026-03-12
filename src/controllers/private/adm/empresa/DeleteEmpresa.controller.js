@@ -14,28 +14,16 @@ exports.main = async (req, res) => {
       });
     }
 
-    // OBTENER LOGO_URL ANTES DE ELIMINAR
-    const logoQuery  = 'SELECT logo_url FROM empresas WHERE cod_empresa = $1';
-    const logoResult = await executeQueryWithSession(user, logoQuery, [cod_empresa]);
-
-    // ELIMINAR EMPRESA DE BD
-    const deleteQuery = 'DELETE FROM empresas WHERE cod_empresa = $1';
-    const result = await executeQueryWithSession(user, deleteQuery, [cod_empresa]);
+    // INACTIVAR EMPRESA EN BD (Soft Delete - Estado 'E' para eliminado)
+    const deleteQuery = "UPDATE empresas SET estado = 'E', fecha_mod = NOW(), usuario_mod = $1 WHERE cod_empresa = $2";
+    const result = await executeQueryWithSession(user, deleteQuery, [user.username, parseInt(cod_empresa)]);
 
     if (!result.success) {
       throw new Error('Error al eliminar empresa');
     }
 
-    // ELIMINAR CARPETA FÍSICA CON LOGO
-    if (logoResult.success && logoResult.data[0]?.logo_url) {
-      const empresaDir = path.join(
-        process.cwd(),'src','filestore','empresas', String(cod_empresa));
-      
-      if (fs.existsSync(empresaDir)) {
-        fs.rmSync(empresaDir, { recursive: true, force: true });
-      }
-    }
-
+    // Ya no eliminamos la carpeta física con el logo para mantener integridad de datos
+    
     return res.status(200).json({
       success: true,
       mensaje: 'Empresa eliminada exitosamente'

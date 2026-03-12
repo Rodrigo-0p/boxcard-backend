@@ -2,6 +2,7 @@
 const express = require('express');
 const router = express.Router();
 const authController = require('../../controllers/public/auth.controllers');
+const { loginLimiter, passwordChangeLimiter } = require('../../middleware/rateLimiters');
 
 // rutaBase
 const base_ruta = '/public';

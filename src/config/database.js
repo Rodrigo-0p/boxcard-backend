@@ -9,11 +9,13 @@ require('dotenv').config({ path: path.join(__dirname, '..', '..', '.env'), quiet
 // FUNCIÓN PARA CONSULTAS CON SESIÓN
 // ========================================
 const executeQueryWithSession = async (user, sqlQuery, params = []) => {
-  const sessionData = user;
+  if (!user || !user.username) {
+    throw new Error('Sesión de usuario inválida o no proporcionada');
+  }
   // Reutilizar tu función existente
   return await executeWithUserConnection(
-    sessionData.username,
-    sessionData.password,
+    user.username,
+    user.password,
     async (client) => {
       const result = await client.query(sqlQuery, params);
       return result.rows;
@@ -22,9 +24,13 @@ const executeQueryWithSession = async (user, sqlQuery, params = []) => {
 };
 
 const executeAdminQuery = async (adminUser, sqlQuery, params = []) => {
+  // Si no se proporciona usuario, usar los del sistema de forma segura
+  const vuser = adminUser ? adminUser.username : process.env.DB_USER_UPDATE;
+  const vpass = adminUser ? adminUser.password : process.env.DB_PASS_UPDATE;
+
   return await executeWithUserConnection(
-    adminUser.username,
-    adminUser.password,
+    vuser,
+    vpass,
     async (client) => {
       const result = await client.query(sqlQuery, params);
       return result.rows;
@@ -36,14 +42,6 @@ const executeAdminQuery = async (adminUser, sqlQuery, params = []) => {
 // ESQUEMA GENÉRICO: CONECTAR → CONSULTAR → CERRAR
 // ========================================
 const executeWithUserConnection = async (username, password, queryCallback) => {
-  // console.log({
-  //   user      : username,
-  //   host      : process.env.DB_HOST || 'localhost',
-  //   database  : process.env.DB_NAME || 'boxcard',
-  //   password  : password,
-  //   port      : process.env.DB_PORT || 5432,
-  //   connectionTimeoutMillis: 5000,
-  // })
   const client = new Client({
     user: username,
     host: process.env.DB_HOST || 'localhost',
@@ -72,22 +70,22 @@ const executeWithUserConnection = async (username, password, queryCallback) => {
 
     // Clasificar errores
     if (error.code === '28P01') {
-      let verror1 = { success: false, message: 'Usuario o contraseña incorrectos' }
+      let verror1 = { success: false, message: 'Usuario o contraseña incorrectos', error }
       log_error.error(moment().format('DD/MM/YYYY HH:mm:ss'), verror1)
       return verror1;
 
     } else if (error.code === 'ECONNREFUSED') {
-      let verror2 = { success: false, message: 'Usuario o contraseña incorrectos' }
+      let verror2 = { success: false, message: 'Usuario o contraseña incorrectos', error }
       log_error.error(moment().format('DD/MM/YYYY HH:mm:ss'), verror2)
-      return { success: false, message: 'Error de conexión a la base de datos' };
+      return { success: false, message: 'Error de conexión a la base de datos', error };
 
     } else if (error.code === '3D000') {
-      let verror3 = { success: false, message: 'Base de datos no encontrada' };
+      let verror3 = { success: false, message: 'Base de datos no encontrada', error };
       log_error.error(moment().format('DD/MM/YYYY HH:mm:ss'), verror3)
       return verror3;
 
     }
-    let verror4 = { success: false, message: 'Error de autenticación' };
+    let verror4 = { success: false, message: 'Error de autenticación', error };
     log_error.error(moment().format('DD/MM/YYYY HH:mm:ss'), verror4)
     return verror4;
   }
@@ -134,7 +132,7 @@ const authenticateAndGetUserData = async (username, password, nro_documento_logi
 
     const userData = userResult.rows[0];
 
-    // 2. OBTENER TODAS LAS EMPRESAS ACTIVAS DEL USUARIO
+    // 2. OBTENER TODAS LAS EMPRESAS ACTIVAS DEL USUARIO (ASOCIADAS A SU USUARIO_PG)
     const empresasQuery = `
      SELECT e.nombre as empresa
           , e.ruc
@@ -145,12 +143,12 @@ const authenticateAndGetUserData = async (username, password, nro_documento_logi
        FROM empresas e
       INNER JOIN personas pe 
          ON e.cod_empresa  = pe.cod_empresa
-      WHERE pe.cod_persona = $1
+      WHERE pe.usuario_pg = CURRENT_USER
         AND e.estado  = 'A'
         AND pe.estado = 'A'
       ORDER BY e.nombre ASC`;
 
-    const empresasResult = await client.query(empresasQuery, [userData.cod_persona]);
+    const empresasResult = await client.query(empresasQuery);
 
 
     if (empresasResult.rows.length === 0) {

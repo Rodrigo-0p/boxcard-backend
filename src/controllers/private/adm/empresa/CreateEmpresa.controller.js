@@ -1,7 +1,7 @@
 const { executeQueryWithSession } = require('../../../../config/database');
 const path = require('path');
 const fs = require('fs');
-const { log_error } = require('../../../../log/logger')
+const { log_error, log_info } = require('../../../../log/logger')
 
 const moveLogoToFinal = (tempPath, cod_empresa) => {
   const ext = path.extname(tempPath);
@@ -42,6 +42,22 @@ exports.main = async (req, res) => {
 
     const next_cod = maxResult.data[0].next_code;
 
+    // VALIDAR RUC ÚNICO
+    const rucResult = await executeQueryWithSession(
+      user,
+      'SELECT cod_empresa FROM empresas WHERE ruc = $1',
+      [empresaData.ruc]
+    );
+
+    if (rucResult.success && rucResult.data.length > 0) {
+      const vmensaje = `El RUC ${empresaData.ruc} ya está registrado para otra empresa (Cod: ${rucResult.data[0].cod_empresa})`;
+      log_error.error(vmensaje);
+      return res.status(400).json({
+        success: false,
+        mensaje: vmensaje
+      });
+    }
+
     // INSERT empresa sin logo primero
     const query = `
       INSERT INTO empresas (  cod_empresa
@@ -56,6 +72,7 @@ exports.main = async (req, res) => {
                             , es_proveedor
                             , limite_credito
                             , fecha_alta
+                            , usuario_alta
                             ) 
                               VALUES 
                             ( 
@@ -70,7 +87,8 @@ exports.main = async (req, res) => {
                             , $9 
                             , $10
                             , $11
-                            , now() ) RETURNING cod_empresa`;
+                            , now()
+                            , $12 ) RETURNING cod_empresa`;
     const params = [
       next_cod
       , empresaData.nombre
@@ -80,9 +98,10 @@ exports.main = async (req, res) => {
       , empresaData.nro_telef
       , empresaData.tip_empresa
       , empresaData.modalidad
-      , empresaData.estado || 'A'
-      , empresaData.es_proveedor === true || empresaData.es_proveedor === 'S' ? 'S' : 'N'
+      , empresaData.estado === 'A' || empresaData.estado === true || empresaData.estado === 'true' ? 'A' : 'I'
+      , empresaData.es_proveedor === true || empresaData.es_proveedor === 'S' || empresaData.es_proveedor === 'true' ? 'S' : 'N'
       , empresaData.limite_credito || 0
+      , user.username
     ];
 
     const result = await executeQueryWithSession(user, query, params);

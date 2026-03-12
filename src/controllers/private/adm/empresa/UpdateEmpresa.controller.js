@@ -43,6 +43,25 @@ exports.main = async (req, res) => {
       tempFilePath = req.file.path;
     }
 
+    // VALIDAR RUC ÚNICO (excluyendo la empresa actual)
+    const rucResult = await executeQueryWithSession(
+      user,
+      'SELECT cod_empresa FROM empresas WHERE ruc = $1 AND cod_empresa != $2',
+      [empresaData.ruc, cod_empresa]
+    );
+
+    if (rucResult.success && rucResult.data.length > 0) {
+      if (tempFilePath && fs.existsSync(tempFilePath)) {
+        fs.unlinkSync(tempFilePath);
+      }
+      const vmensaje = `El RUC ${empresaData.ruc} ya está registrado por otra empresa (Cod: ${rucResult.data[0].cod_empresa})`;
+      log_error.error(vmensaje);
+      return res.status(400).json({
+        success: false,
+        mensaje: vmensaje
+      });
+    }
+
     let logo_url = null;
 
     // Si hay nuevo logo, moverlo
@@ -65,8 +84,9 @@ exports.main = async (req, res) => {
       , es_proveedor = $9
       , limite_credito = $10
       , fecha_mod   = NOW()
-        ${logo_url ? ', logo_url = $12' : ''}
-      WHERE cod_empresa = $11
+      , usuario_mod = $11
+        ${logo_url ? ', logo_url = $13' : ''}
+      WHERE cod_empresa = $12
     `;
 
     const params = [
@@ -77,10 +97,11 @@ exports.main = async (req, res) => {
       , empresaData.nro_telef
       , empresaData.tip_empresa
       , empresaData.modalidad
-      , empresaData.estado || 'A'
-      , empresaData.es_proveedor === true || empresaData.es_proveedor === 'S' ? 'S' : 'N'
+      , empresaData.estado === 'A' || empresaData.estado === true || empresaData.estado === 'true' ? 'A' : 'I'
+      , empresaData.es_proveedor === true || empresaData.es_proveedor === 'S' || empresaData.es_proveedor === 'true' ? 'S' : 'N'
       , empresaData.limite_credito || 0
-      , cod_empresa
+      , user.username
+      , parseInt(cod_empresa)
     ];
 
     if (logo_url) params.push(logo_url);

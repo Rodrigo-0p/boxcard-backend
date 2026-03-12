@@ -1,5 +1,5 @@
 const jwt = require('jsonwebtoken');
-const { authenticateAndGetUserData, executeWithUserConnection } = require('../../config/database');
+const { authenticateAndGetUserData, executeWithUserConnection, executeAdminQuery } = require('../../config/database');
 const { buildAlterPasswordQuery, validatePasswordStrength } = require('../../utils/sqlSecurity');
 const { log_error, log_info } = require('../../log/logger');
 const moment = require('moment');
@@ -27,11 +27,69 @@ exports.login = async (req, res) => {
       });
     }
 
+    // 1. ✅ VERIFICAR BLOQUEO PERSISTENTE EN BASE DE DATOS
+    const adminUser = { username: process.env.DB_USER_UPDATE, password: process.env.DB_PASS_UPDATE };
+    const windowMinutes = parseInt(process.env.RATE_LIMIT_LOGIN_WINDOW_MINUTES || '15');
+    const maxAttempts = parseInt(process.env.loginLimiter || process.env.LOGIN_LIMITER || process.env.RATE_LIMIT_LOGIN_MAX_ATTEMPTS || '5');
+    
+    // Consultar si el usuario está bloqueado por tiempo
+    const lockoutQuery = `
+      SELECT fecha_password_temp, intentos_fallidos
+      FROM personas 
+      WHERE usuario_pg = $1
+    `;
+    const lockoutResult = await executeAdminQuery(adminUser, lockoutQuery, [username]);
+
+    if (lockoutResult.success && lockoutResult.data && lockoutResult.data.length > 0) {
+      const { fecha_password_temp, intentos_fallidos } = lockoutResult.data[0];
+
+      // Verificar si el bloqueo temporal sigue vigente
+      if (fecha_password_temp) {
+        const lockoutEnd = moment(fecha_password_temp).add(windowMinutes, 'minutes');
+        if (moment().isBefore(lockoutEnd)) {
+          const momentoDesbloqueo = lockoutEnd.format('HH:mm');
+          log_error.error(`Intento de login en cuenta bloqueada - Usuario: ${username} - Hasta: ${momentoDesbloqueo} IP:${clientIP}`);
+          
+          return res.status(429).json({
+            success: false,
+            message: `Demasiados intentos. Su cuenta está bloqueada temporalmente hasta las ${momentoDesbloqueo}.`,
+            code: 'RATE_LIMIT_EXCEEDED'
+          });
+        }
+      }
+    }
+
     // Autenticar
     const authResult = await authenticateAndGetUserData(username, password, nro_documento);
 
     if (!authResult.success) {
       log_error.error(`Login fallido - Usuario: ${username} - Error: ${authResult.message} IP:${clientIP}`);
+      
+      // Incrementar intentos fallidos en la base de datos
+      try {
+        const updateAttemptsQuery = `
+          UPDATE personas 
+          SET intentos_fallidos = COALESCE(intentos_fallidos, 0) + 1,
+              fecha_password_temp = CASE WHEN COALESCE(intentos_fallidos, 0) + 1 >= $2 THEN NOW() ELSE fecha_password_temp END
+          WHERE usuario_pg = $1
+        `;
+        await executeAdminQuery(adminUser, updateAttemptsQuery, [username, maxAttempts]);
+        
+        // Si el próximo intento superaría el límite, informar al usuario
+        const checkNewStatus = await executeAdminQuery(adminUser, `SELECT intentos_fallidos FROM personas WHERE usuario_pg = $1`, [username]);
+        const currentAttempts = checkNewStatus.data[0]?.intentos_fallidos || 0;
+        
+        if (currentAttempts >= maxAttempts) {
+           return res.status(429).json({
+            success: false,
+            message: `Demasiados intentos fallidos. Su cuenta ha sido bloqueada por ${windowMinutes} minutos.`,
+            code: 'RATE_LIMIT_EXCEEDED'
+          });
+        }
+      } catch (dbErr) {
+        log_error.error(`Error actualizando intentos para ${username}: ${dbErr.message}`);
+      }
+
       return res.status(401).json({
         success: false,
         message: authResult.message,
@@ -49,13 +107,10 @@ exports.login = async (req, res) => {
         message: usuario.message || 'Usuario inactivo. Contacte al administrador.',
         code: 'USER_INACTIVE'
       });
-    } else if (!authResult.success) {
-      log_error.error(`Login fallido - Usuario: ${username} - Error: ${authResult.message} IP:${clientIP}`);
-      return res.status(401).json({
-        success: false,
-        message: message,
-      });
     }
+
+    // ✅ RESETEAR BLOQUEO Y CONTADOR TRAS LOGIN EXITOSO
+    await executeAdminQuery(adminUser, `UPDATE personas SET fecha_password_temp = NULL, intentos_fallidos = 0 WHERE usuario_pg = $1`, [username]);
 
     // ✅ VALIDAR ROL ASIGNADO
     if (!usuario.role || usuario.role === 'sin_rol') {
@@ -178,7 +233,9 @@ exports.cambiarPasswordTemporal = async (req, res) => {
       const updatePersonaQuery = `
         UPDATE personas 
            SET ultimo_cambio_password = NOW(),
-               password_temporal = 'N'
+               password_temporal = 'N',
+               fecha_password_temp = NULL,
+               intentos_fallidos = 0
          WHERE usuario_pg = $1
       `;
       await client.query(updatePersonaQuery, [username]);

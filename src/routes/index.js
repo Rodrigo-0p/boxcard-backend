@@ -12,10 +12,14 @@ const img = require('./private/img/img.empresa');
 const empresas = require('./private/adm/Empresas.routes');
 // PERSONA
 const persona = require('./private/adm/Persona.routes');
+// USUARIO
+const usuario = require('./private/adm/Usuario.routes');
 // SOLICITUD
 const solicitud = require('./private/adm/Solicitud.routes');
 // BENEFICIARIO
 const beneficiario = require('./private/adm/Beneficiario.routes');
+// CONFIGURACIÓN / PERFIL
+const profile = require('./private/conf/Profile.routes');
 
 module.exports = () => {
 
@@ -30,8 +34,10 @@ module.exports = () => {
   // PRIVADO EMPRESAS
   router.use(empresas());
   router.use(persona());
+  router.use(usuario());
   router.use(solicitud());
   router.use(beneficiario());
+  router.use(profile());
 
   return router;
 }

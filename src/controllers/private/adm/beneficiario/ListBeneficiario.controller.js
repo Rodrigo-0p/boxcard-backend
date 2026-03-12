@@ -16,6 +16,8 @@ exports.main = async (req, res) => {
            , nb.estado
            , nb.monto_limite
            , nb.fecha_alta
+           , nb.usuario_alta
+           , nb.usuario_mod
         FROM nominas_benef nb
        WHERE nb.cod_empresa = $1
          AND nb.estado = 'A'

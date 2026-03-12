@@ -5,6 +5,7 @@ const main = async (req, res) => {
     const user = req.user;
     const { cod_empresa } = user;
 
+    // Listamos todas las personas, la tabla decidirá si mostrar el botón "Crear Usuario" o "Editar Usuario"
     const query = `
       SELECT 
         p.cod_persona,
@@ -34,7 +35,8 @@ const main = async (req, res) => {
         END as rol_principal
       FROM personas p
       INNER JOIN empresas e ON p.cod_empresa = e.cod_empresa
-      WHERE p.cod_empresa = $1 AND p.estado != 'E'
+      WHERE p.cod_empresa = $1
+        AND p.estado = 'A'
       ORDER BY p.descripcion ASC
     `;
 
@@ -43,7 +45,7 @@ const main = async (req, res) => {
     if (!result.success) {
       return res.status(500).json({
         success: false,
-        message: 'Error al obtener personas',
+        message: 'Error al obtener usuarios',
         data: []
       });
     }
@@ -54,10 +56,10 @@ const main = async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Error listando personas:', error);
+    console.error('Error listando usuarios:', error);
     return res.status(500).json({
       success: false,
-      message: 'Error al listar personas',
+      message: 'Error al listar usuarios',
       error: error.message
     });
   }

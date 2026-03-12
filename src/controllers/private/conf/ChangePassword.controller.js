@@ -56,12 +56,22 @@ exports.main = async (req, res) => {
         // 3. Cambiar contraseña en PostgreSQL
         try {
             const alterQuery = buildAlterPasswordQuery(user.username, passwordNueva);
-            await executeAdminQuery(user, alterQuery, []);
+            // Usamos null en el primer parámetro para que executeAdminQuery use las credenciales de sistema (.env)
+            const resultAlter = await executeAdminQuery(null, alterQuery, []);
+            
+            if (!resultAlter.success) {
+                log_error.error(`Error al ejecutar ALTER USER para ${user.username}:`, resultAlter.error);
+                return res.status(500).json({
+                    success: false,
+                    message: 'Error al actualizar la contraseña en el motor de base de datos',
+                    error: resultAlter.error
+                });
+            }
         } catch (pgError) {
-            log_error.error(`Error al ejecutar ALTER USER para ${user.username}:`, pgError);
+            log_error.error(`Excepción al ejecutar ALTER USER para ${user.username}:`, pgError);
             return res.status(500).json({
                 success: false,
-                message: 'Error al actualizar la contraseña en el motor de base de datos'
+                message: 'Error inesperado al actualizar la contraseña'
             });
         }
 
@@ -73,13 +83,36 @@ exports.main = async (req, res) => {
        WHERE usuario_pg = $1
     `;
 
-        await executeAdminQuery(user, updatePersonaQuery, [user.username]);
+        await executeAdminQuery(null, updatePersonaQuery, [user.username]);
+
+        // 5. Regenerar Token JWT con la nueva contraseña
+        const CryptoJS = require('crypto-js');
+        const jwt = require('jsonwebtoken');
+        const path = require('path');
+        require('dotenv').config({ path: path.join(__dirname, '..', '..', '..', '..', '.env'), quiet: true });
+
+        const encryptPassword = (password) => {
+            return CryptoJS.AES.encrypt(password, process.env.ENC_SECRET).toString();
+        }
+
+        const tokenPayload = { ...user };
+        delete tokenPayload.exp;
+        delete tokenPayload.iat;
+        tokenPayload.enc_pwd = encryptPassword(passwordNueva);
+        tokenPayload.login_time = require('moment')().format('DD/MM/YYYY HH:mm');
+
+        const newToken = jwt.sign(
+            tokenPayload,
+            process.env.JWT_SECRET,
+            { expiresIn: process.env.JWT_EXPIRES_IN || '8h' }
+        );
 
         log_info.info(`Contraseña cambiada exitosamente para el usuario: ${user.username}`);
 
         return res.status(200).json({
             success: true,
-            message: 'Contraseña actualizada exitosamente'
+            message: 'Contraseña actualizada exitosamente',
+            token: newToken
         });
 
     } catch (error) {

@@ -22,7 +22,10 @@ const main = async (req, res) => {
                 , e.logo_url
                 , e.es_proveedor
                 , e.limite_credito
+                , e.usuario_alta
+                , e.usuario_mod
              FROM empresas e
+            WHERE e.estado in ('A', 'I')
             ORDER BY nombre ASC
         `;
       params = [];
@@ -42,6 +45,8 @@ const main = async (req, res) => {
                 , e.logo_url
                 , e.es_proveedor
                 , e.limite_credito
+                , e.usuario_alta
+                , e.usuario_mod
             FROM empresas e
             INNER JOIN personas p ON e.cod_empresa = p.cod_empresa
             WHERE p.cod_persona = $1

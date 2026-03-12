@@ -89,7 +89,6 @@ exports.verifyToken = (req, res, next) => {
   try {
     jwt.verify(token, process.env.JWT_SECRET, (err, decoded) => {
       if (err) {
-        console.log(`❌ Token inválido para: ${req.path} - Error: ${err.name}`);
         return res
           .status(err.name === 'TokenExpiredError' ? 401 : 403)
           .json({
@@ -105,11 +104,9 @@ exports.verifyToken = (req, res, next) => {
       decoded.password = decryptPassword(decoded.enc_pwd);
       req.user = decoded;
       log_info.info(`✅ Token válido para usuario: ${decoded.username} - Ruta: ${req.path}`)
-      console.log(`✅ Token válido para usuario: ${decoded.username} - Ruta: ${req.path}`);
       next();
     });
   } catch (error) {
-    console.log(`Error verificando token: ${error.message}`);
     return res.status(401).json({
       success: false,
       message: 'Token inválido',

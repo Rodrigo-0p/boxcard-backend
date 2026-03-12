@@ -17,12 +17,14 @@ exports.main = async (req, res) => {
         // Soft delete: cambiar estado a 'I'
         const deleteQuery = `
       UPDATE nominas_benef
-         SET estado = 'I'
-       WHERE cod_beneficiario = $1
-         AND cod_empresa      = $2
+         SET estado      = 'I'
+           , usuario_mod = $1
+           , fecha_mod   = NOW()
+       WHERE cod_beneficiario = $2
+         AND cod_empresa      = $3
     `;
 
-        const result = await executeQueryWithSession(user, deleteQuery, [cod_beneficiario, user.cod_empresa]);
+        const result = await executeQueryWithSession(user, deleteQuery, [user.username, cod_beneficiario, user.cod_empresa]);
 
         if (!result.success) {
             return res.status(500).json({

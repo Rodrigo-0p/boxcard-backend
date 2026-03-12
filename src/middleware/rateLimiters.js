@@ -1,6 +1,7 @@
 const rateLimit = require('express-rate-limit');
-const { log_login_limit, log_password_limit } = require('../log/logger');
+const { log_login_limit, log_password_limit, log_error } = require('../log/logger');
 const moment = require('moment');
+const { executeAdminQuery } = require('../config/database');
 
 // ========================================
 // STORES PARA PODER REINICIAR LOS LÍMITES
@@ -16,7 +17,6 @@ const passwordStore = new rateLimit.MemoryStore();
 const resetAllRateLimits = () => {
     if (loginStore.resetAll) loginStore.resetAll();
     if (passwordStore.resetAll) passwordStore.resetAll();
-    console.log('✅ Todos los contadores de rate limit han sido reiniciados a 0.');
     return true;
 };
 
@@ -25,7 +25,7 @@ const resetAllRateLimits = () => {
 // ========================================
 const loginLimiter = rateLimit({
     windowMs: parseInt(process.env.RATE_LIMIT_LOGIN_WINDOW_MINUTES || '15') * 60 * 1000,
-    max: parseInt(process.env.RATE_LIMIT_LOGIN_MAX_ATTEMPTS || '5'),
+    max: parseInt(process.env.loginLimiter || process.env.LOGIN_LIMITER || process.env.RATE_LIMIT_LOGIN_MAX_ATTEMPTS || '5'),
     store: loginStore,
     message: {
         success: false,
@@ -41,11 +41,24 @@ const loginLimiter = rateLimit({
     },
     skipSuccessfulRequests: true,
     validate: { ip: false },
-    handler: (req, res, next, options) => {
+    handler: async (req, res, next, options) => {
         const ip = req.clientIP || req.ip;
         const username = req.body.username || 'unknown';
         const now = moment().format('DD/MM/YYYY HH:mm:ss');
-        log_login_limit.info(`[${now}] BLOQUEO LOGIN: IP=${ip} | Usuario=${username} | Ventana=${process.env.RATE_LIMIT_LOGIN_WINDOW_MINUTES}min`);
+        
+        log_login_limit.info(`[${now}] BLOQUEO LOGIN (Persistent): IP=${ip} | Usuario=${username}`);
+
+        // Persistir bloqueo en BD si tenemos el usuario
+        if (username !== 'unknown') {
+            try {
+                const adminUser = { username: process.env.DB_USER_UPDATE, password: process.env.DB_PASS_UPDATE };
+                const updateQuery = `UPDATE personas SET fecha_password_temp = NOW() WHERE usuario_pg = $1`;
+                await executeAdminQuery(adminUser, updateQuery, [username]);
+            } catch (err) {
+                log_error.error(`Error persistiendo bloqueo para ${username}: ${err.message}`);
+            }
+        }
+
         res.status(options.statusCode).send(options.message);
     }
 });
@@ -68,11 +81,24 @@ const passwordChangeLimiter = rateLimit({
     },
     skipSuccessfulRequests: true,
     validate: { ip: false },
-    handler: (req, res, next, options) => {
+    handler: async (req, res, next, options) => {
         const ip = req.clientIP || req.ip;
         const username = req.body.username || 'unknown';
         const now = moment().format('DD/MM/YYYY HH:mm:ss');
-        log_password_limit.info(`[${now}] BLOQUEO PASSWORD: IP=${ip} | Usuario=${username} | Ventana=${process.env.RATE_LIMIT_PASSWORD_WINDOW_MINUTES}min`);
+
+        log_password_limit.info(`[${now}] BLOQUEO PASSWORD (Persistent): IP=${ip} | Usuario=${username}`);
+
+        // Persistir bloqueo en BD
+        if (username !== 'unknown') {
+            try {
+                const adminUser = { username: process.env.DB_USER_UPDATE, password: process.env.DB_PASS_UPDATE };
+                const updateQuery = `UPDATE personas SET fecha_password_temp = NOW() WHERE usuario_pg = $1`;
+                await executeAdminQuery(adminUser, updateQuery, [username]);
+            } catch (err) {
+                log_error.error(`Error persistiendo bloqueo password para ${username}: ${err.message}`);
+            }
+        }
+
         res.status(options.statusCode).send(options.message);
     }
 });
