@@ -42,7 +42,7 @@ exports.main = async (req, res) => {
            , e.tip_empresa
            , e.modalidad
            , COALESCE(e.limite_credito, 0) as limite_credito
-           , (SELECT COALESCE(SUM(monto_limite), 0) FROM nominas_benef WHERE cod_empresa = e.cod_empresa AND estado = 'A') as cupo_asignado
+           , (SELECT COALESCE(SUM(monto_solicitado), 0) FROM solicitudes_carga WHERE cod_empresa = e.cod_empresa AND estado IN ('C', 'P')) as cupo_asignado
            , sc.descripcion
            , sc.observaciones
            , sc.monto_solicitado

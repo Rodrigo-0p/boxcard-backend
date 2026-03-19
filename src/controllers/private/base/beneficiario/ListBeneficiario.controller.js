@@ -20,7 +20,7 @@ exports.main = async (req, res) => {
            , nb.usuario_mod
         FROM nominas_benef nb
        WHERE nb.cod_empresa = $1
-         AND nb.estado = 'A'
+      AND nb.estado != 'E'
        ORDER BY nb.nombre_completo ASC
     `;
 

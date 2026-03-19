@@ -7,11 +7,12 @@ const main = async (req, res) => {
 
         // Obtenemos el límite y el cupo consumido de la empresa del usuario
         const query = `
-      SELECT e.cod_empresa
-           , e.nombre
-           , COALESCE(e.limite_credito, 0) as limite_credito
-        FROM empresas e
-       WHERE e.cod_empresa = $1
+       SELECT e.cod_empresa
+            , e.nombre
+            , COALESCE(e.limite_credito, 0) as limite_credito
+            , (SELECT COALESCE(SUM(monto_solicitado), 0) FROM solicitudes_carga WHERE cod_empresa = e.cod_empresa AND estado IN ('C', 'P')) as cupo_asignado
+         FROM empresas e
+        WHERE e.cod_empresa = $1
     `;
 
         const result = await executeQueryWithSession(user, query, [user.cod_empresa]);

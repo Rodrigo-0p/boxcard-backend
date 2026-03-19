@@ -5,7 +5,7 @@ const cors = require('cors');
 const helmet = require('helmet');
 const morgan = require('morgan');
 const path = require('path');
-const { log_info } = require('./log/logger');
+const { log_info, log_error } = require('./log/logger');
 const routes = require('./routes/index');
 const authMiddleware = require('./middleware/middleware');
 const moment = require('moment');
@@ -19,6 +19,8 @@ app.set('trust proxy', true);
 // MIDDLEWARES BÁSICOS
 // ========================================
 app.use(express.json());
+app.use('/empresas', express.static(path.join(process.cwd(), 'src', 'filestore', 'empresas')));
+app.use('/comprobantes', express.static(path.join(process.cwd(), 'src', 'filestore', 'comprobantes')));
 app.use(helmet());
 app.use(morgan('dev'));
 app.use(cors({
@@ -34,8 +36,8 @@ app.use(cors({
 app.use((req, res, next) => {
   res.header('Cross-Origin-Resource-Policy', 'same-site');
   req.clientIP = req.headers['x-forwarded-for']?.split(',')[0] || req.ip;
-  console.log(`ruta: ${req.path}`)
-  log_info.info(`ruta: ${req.path} - ${req.clientIP} - [${moment().format('DD-MM-YYYY HH:mm')}]`);
+  console.log(`[API REQUEST] ${req.method} ${req.originalUrl} - IP: ${req.clientIP}`);
+  log_info.info(`Ruta: ${req.originalUrl} - Método: ${req.method} - IP: ${req.clientIP} - [${moment().format('DD-MM-YYYY HH:mm')}]`);
   next();
 });
 
@@ -49,4 +51,21 @@ app.use(authMiddleware.authDecisionMiddleware);
 // RUTAS PRINCIPALES
 // ========================================
 app.use('/', routes());
+
+// ========================================
+// MANEJO GLOBAL DE ERRORES
+// ========================================
+app.use((err, req, res, next) => {
+  const statusCode = err.status || 500;
+  const message = err.message || 'Error interno del servidor';
+  
+  log_error.error(`[GLOBAL_ERROR] ${statusCode} - ${message} - Ruta: ${req.path} - Método: ${req.method} - IP: ${req.clientIP} - Stack: ${err.stack}`);
+  
+  res.status(statusCode).json({
+    success: false,
+    mensaje: message,
+    code: err.code || 'INTERNAL_ERROR'
+  });
+});
+
 module.exports = app;

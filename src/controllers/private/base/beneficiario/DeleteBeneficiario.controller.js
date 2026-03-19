@@ -17,7 +17,7 @@ exports.main = async (req, res) => {
         // Soft delete: cambiar estado a 'I'
         const deleteQuery = `
       UPDATE nominas_benef
-         SET estado      = 'I'
+         SET estado      = 'E'
            , usuario_mod = $1
            , fecha_mod   = NOW()
        WHERE cod_beneficiario = $2

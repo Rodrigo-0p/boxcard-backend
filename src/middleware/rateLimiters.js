@@ -40,7 +40,7 @@ const loginLimiter = rateLimit({
         return `${ip}_${username}`;
     },
     skipSuccessfulRequests: true,
-    validate: { ip: false },
+    validate: { default: false },
     handler: async (req, res, next, options) => {
         const ip = req.clientIP || req.ip;
         const username = req.body.username || 'unknown';
@@ -80,7 +80,7 @@ const passwordChangeLimiter = rateLimit({
         return `pwd_${ip}_${username}`;
     },
     skipSuccessfulRequests: true,
-    validate: { ip: false },
+    validate: { default: false },
     handler: async (req, res, next, options) => {
         const ip = req.clientIP || req.ip;
         const username = req.body.username || 'unknown';
@@ -116,7 +116,7 @@ const apiLimiter = rateLimit({
     },
     standardHeaders: true,
     legacyHeaders: false,
-    validate: { ip: false },
+    validate: { default: false },
 });
 
 // ========================================
@@ -135,7 +135,7 @@ const strictLimiter = rateLimit({
     keyGenerator: (req) => {
         return req.clientIP || req.ip;
     },
-    validate: { ip: false },
+    validate: { default: false },
 });
 
 module.exports = {
@@ -145,4 +145,3 @@ module.exports = {
     strictLimiter,
     resetAllRateLimits // Exportar para poder usarlo desde el servidor
 };
-

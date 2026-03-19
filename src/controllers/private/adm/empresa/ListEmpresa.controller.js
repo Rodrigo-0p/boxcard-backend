@@ -4,6 +4,7 @@ const main = async (req, res) => {
   try {
     const user = req.user;
     const { cod_persona, role } = user;
+    const { es_proveedor } = req.query;
     let query, params;
 
     if (role === 'rol_super_adm') {

@@ -5,7 +5,7 @@ const moment = require('moment');
 exports.main = async (req, res) => {
     try {
         const user = req.user;
-        const { descripcion, observaciones, detalles, estado } = req.body;
+        const { descripcion, observaciones, detalles, estado, cod_empresa_destino: destinoBody } = req.body;
 
         if (!detalles || !Array.isArray(detalles) || detalles.length === 0) {
             return res.status(400).json({ success: false, mensaje: 'Se requieren detalles de beneficiarios' });
