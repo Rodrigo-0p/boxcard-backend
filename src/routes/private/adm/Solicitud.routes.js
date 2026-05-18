@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 
-const solReporte = require('../../../controllers/private/adm/solicitud/ReporteSolicitud.controller');
+const solReporte = require('../../../controllers/private/base/solicitud/ReporteSolicitud.controller');
 const solList = require('../../../controllers/private/base/solicitud/ListSolicitud.controller');
 const solApprove = require('../../../controllers/private/base/solicitud/ApproveSolicitud.controller');
 const solReject = require('../../../controllers/private/base/solicitud/RejectSolicitud.controller');

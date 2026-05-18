@@ -18,10 +18,12 @@ exports.main = async (req, res) => {
                  , b.monto_limite
               FROM solicitudes_carga_det sd
               JOIN nominas_benef b ON sd.cod_beneficiario = b.cod_beneficiario
+              JOIN solicitudes_carga sc ON sd.cod_solicitud = sc.cod_solicitud
              WHERE sd.cod_solicitud = $1
+               AND (sc.cod_empresa = $2 OR sc.cod_empresa_destino = $2 OR $3 = 'rol_super_adm')
         `;
 
-        const result = await executeQueryWithSession(user, sqlQuery, [cod_solicitud]);
+        const result = await executeQueryWithSession(user, sqlQuery, [cod_solicitud, user.cod_empresa, user.role]);
 
         if (!result.success) {
             return res.status(500).json({ success: false, mensaje: 'Error al obtener detalles' });

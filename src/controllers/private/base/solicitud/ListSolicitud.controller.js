@@ -14,23 +14,14 @@ exports.main = async (req, res) => {
 
         if (isConfirmar) {
             // REQUERIMIENTO: Solo pendientes destinados a la empresa logueada (proveedor).
-            if (user.role === 'rol_super_adm') {
-                whereClause = "sc.estado = 'P'";
-                finalParams = [];
-            } else {
-                whereClause = "sc.estado = 'P' AND sc.cod_empresa_destino = $1";
-                finalParams = [user.cod_empresa];
-            }
+            // Filtramos siempre por cod_empresa_destino para asegurar multi-empresa.
+            whereClause = "sc.estado = 'P' AND sc.cod_empresa_destino = $1";
+            finalParams = [user.cod_empresa];
         } else {
             // Vista normal (Mis solicitudes): 
-            // Si es superadm ve todos. Si es usuario normal solo los de su empresa.
-            if (user.role === 'rol_super_adm') {
-                whereClause = "1=1";
-                finalParams = [];
-            } else {
-                whereClause = "sc.cod_empresa = $1";
-                finalParams = [user.cod_empresa];
-            }
+            // Filtramos siempre por la empresa del usuario para evitar ver solicitudes ajenas.
+            whereClause = "sc.cod_empresa = $1";
+            finalParams = [user.cod_empresa];
         }
 
         const sqlQuery = `

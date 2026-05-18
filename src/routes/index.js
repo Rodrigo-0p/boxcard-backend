@@ -21,6 +21,7 @@ const persona = require('./private/adm/Persona.routes');
 const usuario = require('./private/adm/Usuario.routes');
 // CONFIGURACIÓN / PERFIL
 const profile = require('./private/conf/Profile.routes');
+const configuracion_adm = require('./private/adm/configuracion.routes');
 
 module.exports = () => {
 
@@ -42,6 +43,7 @@ module.exports = () => {
   router.use(beneficiario());
   router.use(beneficiario_adm());
   router.use(profile());
+  router.use(configuracion_adm());
 
   return router;
 }

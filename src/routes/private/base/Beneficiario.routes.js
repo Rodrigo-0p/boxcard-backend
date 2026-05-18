@@ -9,7 +9,6 @@ const benefBuscar = require('../../../controllers/private/base/beneficiario/Busc
 const benefCarga = require('../../../controllers/private/base/beneficiario/CargaMasiva.controller');
 const benefPrevalidar = require('../../../controllers/private/base/beneficiario/PrevalidarCarga.controller');
 const benefApprove = require('../../../controllers/private/base/beneficiario/ApproveBeneficiario.controller');
-const benefSeed = require('../../../controllers/private/base/beneficiario/SeedBeneficiarios.controller');
 const { strictLimiter } = require('../../../middleware/rateLimiters');
 
 const base_ruta = '/base/beneficiario';
@@ -26,7 +25,6 @@ module.exports = () => {
     router.post(`${base_ruta}/carga-masiva`, strictLimiter, benefCarga.main);
     router.post(`${base_ruta}/prevalidar-carga`, strictLimiter, benefPrevalidar.main);
     router.post(`${base_ruta}/aprobar`, strictLimiter, benefApprove.main);
-    router.post(`${base_ruta}/seed`, strictLimiter, benefSeed.main);
 
     return router;
 };
